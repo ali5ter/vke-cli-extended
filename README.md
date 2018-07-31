@@ -1,9 +1,9 @@
-# vke-cli-extended
+# vke cli-extended
 [vke_wrapper](vke_wrapper) is very experimental so use at your own risk. It 
 is used to add features in an attempt to enhaunce the developer experience of
-the VKE cli. 
+the VKE CLI. 
 
-## Extensions to the VKE cli
+## Extensions to the VKE CLI
 This wrapper provides the following enhauncements:
 * Remove need for the `vke folder set` and `vke project set` commands by inferring
   the folder and project name based on resource name.
@@ -20,9 +20,12 @@ Use the wrapper by employing an alias, e.g.
 
 To ignore the alias use a backslach before the command, i.e. `\vke ...`
 
+## Pre-requisites
+[jq](https://stedolan.github.io/jq/download/) is used to parse JSON responses from the VKE CLI.
+
 ## Other VKE utilities
 You may have use for some other VKE projects:
-* [Install VKE cli using homebrew](https://github.com/ali5ter/homebrew-vke-cli)
-* [VKE cli bash or zsh completion](https://github.com/ali5ter/vke-completion)
+* [Install VKE CLI using homebrew](https://github.com/ali5ter/homebrew-vke CLI)
+* [VKE CLI bash or zsh completion](https://github.com/ali5ter/vke-completion)
 * [A bash VKE prompt](https://github.com/ali5ter/vke-prompt)
 * [Scripts used with VKE](https://github.com/ali5ter/vmware_scripts/tree/master/vke)
