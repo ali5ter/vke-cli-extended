@@ -16,8 +16,8 @@ This wrapper provides the following enhauncements:
 ## Usage
 Use the wrapper by employing an alias, e.g.
 
-    $ alias vke='./vke_wrapper'
-    
+    $ alias vke="$PWD/vke_wrapper"
+
 To ignore the alias use a backslach before the command, i.e. `\vke ...`
 
 ## Other VKE utilities
