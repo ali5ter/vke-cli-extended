@@ -166,6 +166,13 @@ infer_cluster_context() {
             context=$(vke -o json cluster list | jq -r --arg NAME "$VKE_CLUSTER" '.items[] | select(.name==$NAME) | .folderName +"::"+ .projectName')
             VKE_FOLDER="${context%::*}"
             VKE_PROJECT="${context#*::}"
+        else
+            if ! vke folder get | grep -q "No "; then
+                VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
+            fi
+            if ! vke project get | grep -q "No "; then
+                VKE_PROJECT=$(vke -o json project get | jq -r '.Name')
+            fi
         fi
     fi
     vke folder set "$VKE_FOLDER"
@@ -186,6 +193,8 @@ infer_project_context() {
                 CMD="${CMD% *} $VKE_PROJECT"
                 VKE_FOLDER=$(vke -o json project list | jq -r --arg NAME "$VKE_PROJECT" '.items[] | select(.name==$NAME) | .folderName')
             fi
+        else
+            VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
         fi
     fi
     vke folder set "$VKE_FOLDER"
