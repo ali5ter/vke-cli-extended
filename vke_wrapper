@@ -132,36 +132,36 @@ name_of_folder() {
     # Find the folder name if the display name used
     # OR prompt the user for the folder name
     # @param name|display name of folder
-    if ! name_of_object 'folder' "$1"; then
-        select_folder
-    fi
+    name_of_object 'folder' "$1" || select_folder
 }
 
 name_of_project() {
     # Find the project name if the display name used
     # OR prompt the user for the project name
     # @param name|display name of project
-    if ! name_of_object 'project' "$1"; then
-        select_project
-    fi
+    name_of_object 'project' "$1" || select_project
 }
 
 name_of_cluster() {
     # Find the cluster name if the display name used
     # OR prompt the user for the cluster name
     # @param name|display name of cluster
-    if ! name_of_object 'cluster' "$1"; then
-        select_cluster
-    fi
+    name_of_object 'cluster' "$1" || select_cluster
 }
 
 repeat() {
+    # Echo a string X number of times
+    # @param number of times to repeat string
+    # @param the string to repeat
     local times="$1"; shift
     local string="$*"
     printf "%${times}s\n" | sed "s/ /${string}/g"
 }
 
-render_tree_level() {
+render_policy_tree_level() {
+    # Echo a level of the policy tree
+    # @param depth level to render
+    # @param the policy to render
     local depth="$1"; shift
     local policy=$@
     local roles="$(echo $policy | jq -r '.bindings[].role')"
@@ -190,7 +190,34 @@ render_tree_level() {
     done
 }
 
+folder_policy_tree() {
+    # Echo the IAM policies of a folder
+    local policies=$(vke -o json folder iam show $VKE_RESOURCE_NAME)
+    local direct=$(echo $policies | jq -r '.direct')
+    local inherited=$(echo $policies | jq -r '.inherited[]')
+    local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
+    local folder_policy=$(echo $direct | jq -r 'select(.name | contains("folder"))')
+    render_policy_tree_level 0 $org_policy
+    render_policy_tree_level 1 $folder_policy
+    exit 0
+}
+
+project_policy_tree() {
+    # Echo the IAM policies of a project
+    local policies=$(vke -o json project iam show $VKE_RESOURCE_NAME)
+    local direct=$(echo $policies | jq -r '.direct')
+    local inherited=$(echo $policies | jq -r '.inherited[]')
+    local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
+    local folder_policy=$(echo $inherited | jq -r 'select(.name | contains("folder"))')
+    local project_policy=$(echo $direct | jq -r 'select(.name | contains("project"))')
+    render_policy_tree_level 0 $org_policy
+    render_policy_tree_level 1 $folder_policy
+    render_policy_tree_level 2 $project_policy
+    exit 0
+}
+
 cluster_policy_tree() {
+    # Echo the IAM policies of a cluster
     local policies=$(vke -o json cluster iam show $VKE_RESOURCE_NAME)
     local direct=$(echo $policies | jq -r '.direct')
     local inherited=$(echo $policies | jq -r '.inherited[]')
@@ -198,11 +225,10 @@ cluster_policy_tree() {
     local folder_policy=$(echo $inherited | jq -r 'select(.name | contains("folder"))')
     local project_policy=$(echo $inherited | jq -r 'select(.name | contains("project"))')
     local cluster_policy=$(echo $direct | jq -r 'select(.name | contains("cluster"))')
-    local roles=''
-    render_tree_level 0 $org_policy
-    render_tree_level 1 $folder_policy
-    render_tree_level 2 $project_policy
-    render_tree_level 3 $cluster_policy
+    render_policy_tree_level 0 $org_policy
+    render_policy_tree_level 1 $folder_policy
+    render_policy_tree_level 2 $project_policy
+    render_policy_tree_level 3 $cluster_policy
     exit 0
 }
 
@@ -238,18 +264,24 @@ infer_project_context() {
         # The context is not stated in the command so check if it is
         # already set
         if vke folder get | grep -q "No "; then 
-            # Try to derive the context from the cluster name
+            # Try to derive the context from the project name
             if [[ -z "$VKE_RESOURCE_NAME" ]]; then
                 select_folder
             else
-                name_of_project "$VKE_RESOURCE_NAME"
+                SAVEIFS=$IFS
+                IFS=$(echo -en "\n\b")
+                for folder in $VKE_FOLDERS; do
+                    VKE_PROJECTS=$(vke -o json project list -f "${folder%::*}" | jq -r '.items[] | .name +"::"+ .displayName')
+                    name_of_object 'project' "$VKE_RESOURCE_NAME" && VKE_FOLDER="${folder%::*}" && break
+                done
+                IFS=$SAVEIFS
                 CMD="${CMD% *} $VKE_PROJECT"
-                VKE_FOLDER=$(vke -o json project list | jq -r --arg NAME "$VKE_PROJECT" '.items[] | select(.name==$NAME) | .folderName')
             fi
         else
             VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
         fi
         vke folder set "$VKE_FOLDER"
+        vke project set "$VKE_PROJECT"
     fi
 }
 
@@ -293,15 +325,17 @@ infer_context() {
         'project create'* | \
         'project delete'* | \
         'project show'* | \
-        'project list'* | \
         'project set'* | \
         'project iam show'* | \
         'project iam export'* | \
         'project iam import'* | \
         'project iam add'* | \
         'project iam remove'*)
-            [[ "$CMD" =~  list ]] && VKE_RESOURCE_NAME=''
             infer_project_context
+            [[ "$CMD" =~ 'iam show' ]] && project_policy_tree
+            ;;
+        'folder iam show'*)
+            folder_policy_tree
             ;;
     esac
 }
