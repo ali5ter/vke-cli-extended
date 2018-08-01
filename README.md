@@ -12,6 +12,7 @@ This wrapper provides the following enhauncements:
 * Allow the use of the 'display name' to identify a resource.
 * If a resource name can not be found, present the user with a list to select from.
 * Default to latest K8s version when using `vke cluster upgrade`
+* View IAM Policies for a cluster as a tree
 
 ## Usage
 Use the wrapper by employing an alias, e.g.

@@ -367,6 +367,12 @@ if [[ $# -gt 0 ]]; then
 
     VKE_RESOURCE_NAME="${*: -1}"
 
+    ## Look for existing context (folder & project)
+
+    vke folder get | grep -q "No " || VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
+    vke project get | grep -q "No " || VKE_PROJECT=$(vke -o json project get | jq -r '.Name')
+
+
     ## Look for context (folder & project) overrides
 
     VKE_SUBCOMMAND=''
