@@ -171,9 +171,8 @@ render_tree_level() {
     local identity_total=0
     local identity_count=0
     local prefix=''
-    (( depth > 1 )) && prefix=$(repeat $depth '│   ')
-    (( depth == 0 )) && echo -n '. ' || echo -n "${prefix}├── "
-    prefix=$(repeat $((depth + 1)) '│   ')  ## Adjust for children of policy
+    (( depth > 0 )) && prefix=$(repeat $depth '│   ')
+    (( depth == 0 )) && echo -n '. ' || echo -n "$(repeat $((depth - 1)) '│   ')├── "
     echo "${VKE_BOLD}$(echo $policy | jq -r '.name')${VKE_RESET}"
     for role in $roles; do
         (( role_count < role_total )) && echo -n "${prefix}├── " || echo -n "${prefix}└── "
