@@ -32,6 +32,8 @@ VKE_CLUSTER=''
 VKE_OBJ_NAME=''
 VKE_VERSION=''
 VKE_PASSTHROUGH='n'
+VKE_BOLD="$(tput bold)"
+VKE_RESET="$(tput sgr0)"
 
 CMD="$*"
 
@@ -153,6 +155,58 @@ name_of_cluster() {
     fi
 }
 
+repeat() {
+    local times="$1"; shift
+    local string="$*"
+    printf "%${times}s\n" | sed "s/ /${string}/g"
+}
+
+render_tree_level() {
+    local depth="$1"; shift
+    local policy=$@
+    local roles="$(echo $policy | jq -r '.bindings[].role')"
+    local role_total=$(echo "$roles" | wc -l | sed 's/^ *//')
+    local role_count=1
+    local identities=''
+    local identity_total=0
+    local identity_count=0
+    local prefix=''
+    (( depth > 1 )) && prefix=$(repeat $depth '│   ')
+    (( depth == 0 )) && echo -n '. ' || echo -n "${prefix}├── "
+    prefix=$(repeat $((depth + 1)) '│   ')  ## Adjust for children of policy
+    echo "${VKE_BOLD}$(echo $policy | jq -r '.name')${VKE_RESET}"
+    for role in $roles; do
+        (( role_count < role_total )) && echo -n "${prefix}├── " || echo -n "${prefix}└── "
+        echo "$role"
+        identities=$(echo $policy | jq -r --arg ROLE "$role" '.bindings[] | select(.role == $ROLE) | .subjects[]')
+        identity_total=$(echo "$identities" | wc -l | sed 's/^ *//')
+        identity_count=1
+        for identity in $identities; do
+            (( identity_count < identity_total )) && echo -n "${prefix}│   ├── " || echo -n "${prefix}│   └── "
+            # echo "${identity#*\\}"
+            echo "$identity"
+            (( identity_count++ ))
+        done
+        (( role_count++ ))
+    done
+}
+
+cluster_policy_tree() {
+    local policies=$(vke -o json cluster iam show $VKE_RESOURCE_NAME)
+    local direct=$(echo $policies | jq -r '.direct')
+    local inherited=$(echo $policies | jq -r '.inherited[]')
+    local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
+    local folder_policy=$(echo $inherited | jq -r 'select(.name | contains("folder"))')
+    local project_policy=$(echo $inherited | jq -r 'select(.name | contains("project"))')
+    local cluster_policy=$(echo $direct | jq -r 'select(.name | contains("cluster"))')
+    local roles=''
+    render_tree_level 0 $org_policy
+    render_tree_level 1 $folder_policy
+    render_tree_level 2 $project_policy
+    render_tree_level 3 $cluster_policy
+    exit 0
+}
+
 infer_cluster_context() {
     # Find the folder and project names using the cluster name
     if [[ ("$VKE_FOLDER" == '') && ("$VKE_PROJECT" == '') ]]; then
@@ -174,9 +228,9 @@ infer_cluster_context() {
                 VKE_PROJECT=$(vke -o json project get | jq -r '.Name')
             fi
         fi
+        vke folder set "$VKE_FOLDER"
+        vke project set "$VKE_PROJECT"
     fi
-    vke folder set "$VKE_FOLDER"
-    vke project set "$VKE_PROJECT"
 }
 
 infer_project_context() {
@@ -196,8 +250,8 @@ infer_project_context() {
         else
             VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
         fi
+        vke folder set "$VKE_FOLDER"
     fi
-    vke folder set "$VKE_FOLDER"
 }
 
 infer_context() {
@@ -235,6 +289,7 @@ infer_context() {
                 CMD="${CMD% *} -v $VKE_VERSION $VKE_RESOURCE_NAME"
             }
             infer_cluster_context
+            [[ "$CMD" =~ 'iam show' ]] && cluster_policy_tree
             ;;
         'project create'* | \
         'project delete'* | \
