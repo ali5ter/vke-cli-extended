@@ -132,21 +132,21 @@ name_of_folder() {
     # Find the folder name if the display name used
     # OR prompt the user for the folder name
     # @param name|display name of folder
-    name_of_object 'folder' "$1" || select_folder
+    name_of_object 'folder' "$*" || select_folder
 }
 
 name_of_project() {
     # Find the project name if the display name used
     # OR prompt the user for the project name
     # @param name|display name of project
-    name_of_object 'project' "$1" || select_project
+    name_of_object 'project' "$*" || select_project
 }
 
 name_of_cluster() {
     # Find the cluster name if the display name used
     # OR prompt the user for the cluster name
     # @param name|display name of cluster
-    name_of_object 'cluster' "$1" || select_cluster
+    name_of_object 'cluster' "$*" || select_cluster
 }
 
 repeat() {
@@ -192,7 +192,7 @@ render_policy_tree_level() {
 
 folder_policy_tree() {
     # Echo the IAM policies of a folder
-    local policies=$(vke -o json folder iam show $VKE_RESOURCE_NAME)
+    local policies=$(vke -o json folder iam show $VKE_FOLDER)
     local direct=$(echo $policies | jq -r '.direct')
     local inherited=$(echo $policies | jq -r '.inherited[]')
     local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
@@ -204,7 +204,7 @@ folder_policy_tree() {
 
 project_policy_tree() {
     # Echo the IAM policies of a project
-    local policies=$(vke -o json project iam show $VKE_RESOURCE_NAME)
+    local policies=$(vke -o json project iam show $VKE_PROJECT)
     local direct=$(echo $policies | jq -r '.direct')
     local inherited=$(echo $policies | jq -r '.inherited[]')
     local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
@@ -218,7 +218,7 @@ project_policy_tree() {
 
 cluster_policy_tree() {
     # Echo the IAM policies of a cluster
-    local policies=$(vke -o json cluster iam show $VKE_RESOURCE_NAME)
+    local policies=$(vke -o json cluster iam show $VKE_CLUSTER)
     local direct=$(echo $policies | jq -r '.direct')
     local inherited=$(echo $policies | jq -r '.inherited[]')
     local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
@@ -234,14 +234,14 @@ cluster_policy_tree() {
 
 infer_cluster_context() {
     # Find the folder and project names using the cluster name
-    if [[ ("$VKE_FOLDER" == '') && ("$VKE_PROJECT" == '') ]]; then
+    if [[ ("$VKE_FOLDER" == '') || ("$VKE_PROJECT" == '') ]]; then
         # The context is not stated in the command so check if it is
         # already set
         if (vke folder get | grep -q "No ") || (vke project get | grep -q "No "); then
             # Try to derive the context from the cluster name
             VKE_CLUSTERS=$(vke -o json cluster list | jq -r '.items[] | .name +"::"+ .displayName')
             name_of_cluster "$VKE_RESOURCE_NAME"
-            CMD="${CMD% *} $VKE_CLUSTER"
+            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_CLUSTER}"
             context=$(vke -o json cluster list | jq -r --arg NAME "$VKE_CLUSTER" '.items[] | select(.name==$NAME) | .folderName +"::"+ .projectName')
             VKE_FOLDER="${context%::*}"
             VKE_PROJECT="${context#*::}"
@@ -275,7 +275,7 @@ infer_project_context() {
                     name_of_object 'project' "$VKE_RESOURCE_NAME" && VKE_FOLDER="${folder%::*}" && break
                 done
                 IFS=$SAVEIFS
-                CMD="${CMD% *} $VKE_PROJECT"
+            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_PROJECT}"
             fi
         else
             VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
@@ -320,6 +320,8 @@ infer_context() {
                 CMD="${CMD% *} -v $VKE_VERSION $VKE_RESOURCE_NAME"
             }
             infer_cluster_context
+            name_of_cluster "$VKE_RESOURCE_NAME"
+            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_CLUSTER}"
             [[ "$CMD" =~ 'iam show' ]] && cluster_policy_tree
             ;;
         'project create'* | \
@@ -332,10 +334,22 @@ infer_context() {
         'project iam add'* | \
         'project iam remove'*)
             infer_project_context
+            name_of_project "$VKE_RESOURCE_NAME"
+            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_PROJECT}"
             [[ "$CMD" =~ 'iam show' ]] && project_policy_tree
             ;;
-        'folder iam show'*)
-            folder_policy_tree
+        'folder create'* | \
+        'folder delete'* | \
+        'folder show'* | \
+        'folder set'* | \
+        'folder iam show'* | \
+        'folder iam export'* | \
+        'folder iam import'* | \
+        'folder iam add'* | \
+        'folder iam remove'*)
+            name_of_folder "$VKE_RESOURCE_NAME"
+            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_FOLDER}"
+            [[ "$CMD" =~ 'iam show' ]] && folder_policy_tree
             ;;
     esac
 }
@@ -392,13 +406,17 @@ if [[ $# -gt 0 ]]; then
 
     VKE_FOLDERS=$(vke -o json folder list | jq -r '.items[] | .name +"::"+ .displayName')
 
+    ## Prefetch cluster (since CLI allows you to do this without context)
+
+    VKE_CLUSTERS=$(vke -o json cluster list | jq -r '.items[] | .name +"::"+ .displayName')
+
     ## Create a default region (the lowest ID)
 
     VKE_DEFAULT_REGION=$(vke -o json info region list | jq -r -s 'sort_by(.regionId) | .[] | .items[1] | .name')
 
     ## Rough attempt at guessing the resource name 
 
-    VKE_RESOURCE_NAME="${*: -1}"
+    VKE_RESOURCE_NAME="${@: -1}"
 
     ## Look for existing context (folder & project)
 
