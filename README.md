@@ -1,10 +1,9 @@
 # vke cli-extended
 [vke_wrapper](vke_wrapper) is very experimental so use at your own risk. It 
-is used to add features in an attempt to enhaunce the developer experience of
-the VKE CLI. 
+is used to to enhaunce the developer experience of the VKE CLI. 
 
 ## Extensions to the VKE CLI
-This wrapper provides the following enhauncements:
+This wrapper provides the following features to the VKE CLI:
 * Remove need for the `vke folder set` and `vke project set` commands by inferring
   the folder and project name based on resource name.
 * If the folder or project name can not be inferred, present the user with a list
