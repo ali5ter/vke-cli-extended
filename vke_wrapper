@@ -12,9 +12,6 @@
 #    select from.
 # 5. Default to latest K8s version when using 'vke cluster upgrade'
 #
-# BUG GOTCHA: for commands that need a resource name, if one is not supplied,
-# this wrapper doesn't yet have a good way to recognise that.
-#
 # @author Alister Lewis-Bowen <alister@lewis-bowen.org>
 
 if [[ -n $DEBUG ]]; then
