@@ -34,6 +34,7 @@ VKE_VERSION=''
 VKE_PASSTHROUGH='n'
 VKE_BOLD="$(tput bold)"
 VKE_RESET="$(tput sgr0)"
+VKE_DUMMY_NAME='n0t-m3nt-t0-b3-f0und'
 
 CMD="$*"
 
@@ -105,6 +106,11 @@ name_of_object() {
     local name=''
     local dname=''
     local found=1
+    [[ "$aname" =~ create|show|rename|delete|get|export|import|add|remove|list ]] && {
+        CMD="$CMD $VKE_DUMMY_NAME"
+        VKE_RESOURCE_NAME="$VKE_DUMMY_NAME"
+        return $found
+    }
     case "$obj_type" in
         folder) objs="$VKE_FOLDERS";;
         project) objs="$VKE_PROJECTS";;
@@ -322,7 +328,7 @@ infer_context() {
             infer_cluster_context
             name_of_cluster "$VKE_RESOURCE_NAME"
             CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_CLUSTER}"
-            [[ "$CMD" =~ 'iam show' ]] && cluster_policy_tree
+            if [[ "$CMD" =~ 'iam show' ]]; then cluster_policy_tree; fi
             ;;
         'project create'* | \
         'project delete'* | \
@@ -336,7 +342,7 @@ infer_context() {
             infer_project_context
             name_of_project "$VKE_RESOURCE_NAME"
             CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_PROJECT}"
-            [[ "$CMD" =~ 'iam show' ]] && project_policy_tree
+            if [[ "$CMD" =~ 'iam show' ]]; then project_policy_tree; fi
             ;;
         'folder create'* | \
         'folder delete'* | \
@@ -349,7 +355,7 @@ infer_context() {
         'folder iam remove'*)
             name_of_folder "$VKE_RESOURCE_NAME"
             CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_FOLDER}"
-            [[ "$CMD" =~ 'iam show' ]] && folder_policy_tree
+            if [[ "$CMD" =~ 'iam show' ]]; then folder_policy_tree; fi
             ;;
     esac
 }

@@ -68,6 +68,14 @@
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/vke_wrapper",
             "args": ["cluster", "show", "alb-🦄-deve-epenthetic-comurmurer"]
+        },
+        {
+            "type": "bashdb",
+            "request": "launch",
+            "name": "vke_wrapper cluster namespace show",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/vke_wrapper",
+            "args": ["cluster", "namespace", "show"]
         }
     ]
 }
