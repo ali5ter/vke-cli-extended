@@ -161,6 +161,13 @@ repeat() {
     printf "%${times}s\n" | sed "s/ /${string}/g"
 }
 
+context_options() {
+    local opt=''
+    [[ -z "$VKE_FOLDER" ]] || opt="--folder $VKE_FOLDER"
+    [[ -z "$VKE_PROJECT" ]] || opt="$opt --project $VKE_PROJECT"
+    echo "$opt"
+}
+
 render_policy_tree_level() {
     # Echo a level of the policy tree
     # @param depth level to render
@@ -207,7 +214,7 @@ folder_policy_tree() {
 
 project_policy_tree() {
     # Echo the IAM policies of a project
-    local policies=$(vke -o json project iam show $VKE_PROJECT)
+    local policies=$(vke -o json project iam show $VKE_PROJECT $(context_options))
     local direct=$(echo $policies | jq -r '.direct')
     local inherited=$(echo $policies | jq -r '.inherited[]')
     local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
@@ -221,7 +228,7 @@ project_policy_tree() {
 
 cluster_policy_tree() {
     # Echo the IAM policies of a cluster
-    local policies=$(vke -o json cluster iam show $VKE_CLUSTER)
+    local policies=$(vke -o json cluster iam show $VKE_CLUSTER $(context_options))
     local direct=$(echo $policies | jq -r '.direct')
     local inherited=$(echo $policies | jq -r '.inherited[]')
     local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
@@ -237,54 +244,30 @@ cluster_policy_tree() {
 
 infer_cluster_context() {
     # Find the folder and project names using the cluster name
-    if [[ ("$VKE_FOLDER" == '') || ("$VKE_PROJECT" == '') ]]; then
-        # The context is not stated in the command so check if it is
-        # already set
-        if (vke folder get | grep -q "No ") || (vke project get | grep -q "No "); then
-            # Try to derive the context from the cluster name
-            VKE_CLUSTERS=$(vke -o json cluster list | jq -r '.items[] | .name +"::"+ .displayName')
-            name_of_cluster "$VKE_RESOURCE_NAME"
-            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_CLUSTER}"
-            context=$(vke -o json cluster list | jq -r --arg NAME "$VKE_CLUSTER" '.items[] | select(.name==$NAME) | .folderName +"::"+ .projectName')
-            VKE_FOLDER="${context%::*}"
-            VKE_PROJECT="${context#*::}"
-        else
-            if ! vke folder get | grep -q "No "; then
-                VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
-            fi
-            if ! vke project get | grep -q "No "; then
-                VKE_PROJECT=$(vke -o json project get | jq -r '.Name')
-            fi
-        fi
-        vke folder set "$VKE_FOLDER"
-        vke project set "$VKE_PROJECT"
-    fi
+    name_of_cluster "$VKE_RESOURCE_NAME"
+    context=$(vke -o json cluster list | jq -r --arg NAME "$VKE_CLUSTER" '.items[] | select(.name==$NAME) | .folderName +"::"+ .projectName')
+    VKE_FOLDER="${context%::*}"
+    VKE_PROJECT="${context#*::}"
 }
 
 infer_project_context() {
     # Find the folder name using the project name
     if [[ "$VKE_FOLDER" == '' ]]; then
-        # The context is not stated in the command so check if it is
-        # already set
-        if vke folder get | grep -q "No "; then 
-            # Try to derive the context from the project name
-            if [[ -z "$VKE_RESOURCE_NAME" ]]; then
-                select_folder
-            else
-                SAVEIFS=$IFS
-                IFS=$(echo -en "\n\b")
-                for folder in $VKE_FOLDERS; do
-                    VKE_PROJECTS=$(vke -o json project list -f "${folder%::*}" | jq -r '.items[] | .name +"::"+ .displayName')
-                    name_of_object 'project' "$VKE_RESOURCE_NAME" && VKE_FOLDER="${folder%::*}" && break
-                done
-                IFS=$SAVEIFS
-            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_PROJECT}"
-            fi
-        else
-            VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
-        fi
-        vke folder set "$VKE_FOLDER"
-        vke project set "$VKE_PROJECT"
+        SAVEIFS=$IFS
+        IFS=$(echo -en "\n\b")
+        found=1
+        for folder in $VKE_FOLDERS; do
+            VKE_FOLDER="${folder%::*}"
+            VKE_PROJECTS=$(vke -o json project list $(context_options) | jq -r '.items[] | .name +"::"+ .displayName')
+            for project in $VKE_PROJECTS; do
+                VKE_PROJECT="${project#*::}"
+                if name_of_object 'project' "$VKE_RESOURCE_NAME"; then found=0; break; fi
+            done
+            if (( found == 1 )); then break; fi
+        done
+        IFS=$SAVEIFS
+    else
+        VKE_PROJECTS=$(vke -o json project list $(context_options) | jq -r '.items[] | .name +"::"+ .displayName')
     fi
 }
 
@@ -323,8 +306,9 @@ infer_context() {
                 CMD="${CMD% *} -v $VKE_VERSION $VKE_RESOURCE_NAME"
             }
             infer_cluster_context
-            name_of_cluster "$VKE_RESOURCE_NAME"
+            #name_of_cluster "$VKE_RESOURCE_NAME"
             CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_CLUSTER}"
+            CMD="$CMD $(context_options)"
             if [[ "$CMD" =~ 'iam show' ]]; then cluster_policy_tree; fi
             ;;
         'project create'* | \
@@ -339,6 +323,7 @@ infer_context() {
             infer_project_context
             name_of_project "$VKE_RESOURCE_NAME"
             CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_PROJECT}"
+            CMD="$CMD $(context_options)"
             if [[ "$CMD" =~ 'iam show' ]]; then project_policy_tree; fi
             ;;
         'folder create'* | \
@@ -355,52 +340,6 @@ infer_context() {
             if [[ "$CMD" =~ 'iam show' ]]; then folder_policy_tree; fi
             ;;
     esac
-}
-
-set_context() {
-    # Check if the folder|project context needs to be set for the vke
-    # command. If it is not set, try to infer it or ask the user
-    # @param context = folder|project
-    local context="$1"
-    local name=''
-    # Check if context option provided in the command meaning it is already
-    # overridden intentionally by the user
-    case "$context" in
-        folder) name=$VKE_FOLDER;;
-        project) name=$VKE_PROJECT;;
-        cluster) name=$VKE_CLUSTER;;
-    esac
-    if [[ "$name" != '' ]]; then
-        # Check if this context value needs to be translated from display
-        # name to name
-        case "$context" in
-            folder) name_of_folder "$name";;
-            project) name_of_project "$name";;
-        esac
-    else
-        # The context is not stated in the command so check if the command has
-        # a context option
-        if vke "$CMD" -h | grep -q "\\-\\-$context"; then
-            # Since there is a context option, check if it has already been set
-            if vke folder get | grep -q "No $context"; then
-                # No context is set so ask the user
-                ## TODO: Infer the context
-                case "$context" in
-                    folder)
-                        select_folder
-                        vke folder set "$VKE_FOLDER"
-                        ;;
-                    project)
-                        select_project
-                        vke project set "$VKE_PROJECT"
-                        ;;
-                esac
-            else
-                [[ "$context" == 'folder' ]] && VKE_PROJECTS=$(vke -o json project list -f "$VKE_FOLDER" | jq -r '.items[] | .name +"::"+ .displayName')
-                [[ "$context" == 'cluster' ]] && VKE_CLUSTER=$(vke -o json cluster list -f "$VKE_FOLDER" -p "$VKE_PROJECT" | jq -r '.items[] | .name +"::"+ .displayName')
-            fi
-        fi
-    fi
 }
 
 if [[ $# -gt 0 ]]; then
@@ -448,11 +387,6 @@ if [[ $# -gt 0 ]]; then
     done
 
     if [[ "$VKE_PASSTHROUGH" == 'n' ]]; then
-        ## Figure out the context (folder & project) for the command
-
-        # # Prompt user for context
-        # set_context folder
-        # set_context project
         infer_context
     fi
 fi
