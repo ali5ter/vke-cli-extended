@@ -103,7 +103,7 @@ name_of_object() {
     local name=''
     local dname=''
     local found=1
-    [[ "$aname" =~ create|show|rename|delete|get|export|import|add|remove|list ]] && {
+    [[ "$aname" =~ create|show|rename|delete|get|export|import|add|remove|list|get-kubectl-auth|merge-kubectl-auth ]] && {
         CMD="$CMD $VKE_DUMMY_NAME"
         VKE_RESOURCE_NAME="$VKE_DUMMY_NAME"
         return $found
