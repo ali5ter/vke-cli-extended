@@ -11,8 +11,9 @@ This wrapper provides the following features to the VKE CLI:
 * Allow the use of the 'display name' to identify a resource.
 * If a resource name can not be found, present the user with a list to select from.
 * Default to latest K8s version when using `vke cluster upgrade`
-* Change output of `vke folder iam show`, `vke project iam show` and 
-  `vke cluster iam show` to display a tree of policies, roles and identites.
+* ~~Change output of `vke folder iam show`, `vke project iam show` and 
+  `vke cluster iam show` to display a tree of policies, roles and identites.~~
+  The CLI now produces a tree format to display policy heirarchy.
 
 ## Usage
 Use the wrapper by employing an alias, e.g.

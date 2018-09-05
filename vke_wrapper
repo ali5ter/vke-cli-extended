@@ -4,14 +4,7 @@
 #     alias vke='./vke_wrapper'
 # To ignore this alias, use:
 #     \vke ...
-# Goals of this wrapper are to:
-# 1. Remove need for 'vke folder set' and 'vke project set'
-# 2. Translate any stated display name to name
-# 3. Infer folder and project name based on object being worked on
-# 4. If context or named resource not found, present user with a list to
-#    select from.
-# 5. Default to latest K8s version when using 'vke cluster upgrade'
-#
+# Functionaliy introduced using this wrapper are to are listed in the README
 # @author Alister Lewis-Bowen <alister@lewis-bowen.org>
 
 if [[ -n $DEBUG ]]; then
@@ -103,7 +96,7 @@ name_of_object() {
     local name=''
     local dname=''
     local found=1
-    [[ "$aname" =~ create|show|rename|delete|get|export|import|add|remove|list|get-kubectl-auth|merge-kubectl-auth ]] && {
+    [[ "$aname" =~ create|show|rename|delete|get|export|import|add|remove|list|get-kubectl-auth|merge-kubectl-auth|$VKE_PROJECT|$VKE_FOLDER ]] && {
         CMD="$CMD $VKE_DUMMY_NAME"
         VKE_RESOURCE_NAME="$VKE_DUMMY_NAME"
         return $found
@@ -162,84 +155,10 @@ repeat() {
 }
 
 context_options() {
-    local opt=''
+    local opt
     [[ -z "$VKE_FOLDER" ]] || opt="--folder $VKE_FOLDER"
     [[ -z "$VKE_PROJECT" ]] || opt="$opt --project $VKE_PROJECT"
     echo "$opt"
-}
-
-render_policy_tree_level() {
-    # Echo a level of the policy tree
-    # @param depth level to render
-    # @param the policy to render
-    local depth="$1"; shift
-    local policy=$@
-    local roles="$(echo $policy | jq -r '.bindings[].role')"
-    local role_total=$(echo "$roles" | wc -l | sed 's/^ *//')
-    local role_count=1
-    local identities=''
-    local identity_total=0
-    local identity_count=0
-    local prefix=''
-    (( depth > 0 )) && prefix=$(repeat $depth '    ')
-    (( depth == 0 )) && echo -n '. ' || echo -n "$(repeat $((depth - 1)) '    ')└── "
-    echo "${VKE_BOLD}$(echo $policy | jq -r '.name')${VKE_RESET}"
-    for role in $roles; do
-        (( role_count < role_total )) && echo -n "${prefix}├── " || echo -n "${prefix}└── "
-        echo "$role"
-        identities=$(echo $policy | jq -r --arg ROLE "$role" '.bindings[] | select(.role == $ROLE) | .subjects[]')
-        identity_total=$(echo "$identities" | wc -l | sed 's/^ *//')
-        identity_count=1
-        for identity in $identities; do
-            (( identity_count < identity_total )) && echo -n "${prefix}│   ├── " || echo -n "${prefix}│   └── "
-            # echo "${identity#*\\}"
-            echo "$identity"
-            (( identity_count++ ))
-        done
-        (( role_count++ ))
-    done
-}
-
-folder_policy_tree() {
-    # Echo the IAM policies of a folder
-    local policies=$(vke -o json folder iam show $VKE_FOLDER)
-    local direct=$(echo $policies | jq -r '.direct')
-    local inherited=$(echo $policies | jq -r '.inherited[]')
-    local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
-    local folder_policy=$(echo $direct | jq -r 'select(.name | contains("folder"))')
-    render_policy_tree_level 0 $org_policy
-    render_policy_tree_level 1 $folder_policy
-    exit 0
-}
-
-project_policy_tree() {
-    # Echo the IAM policies of a project
-    local policies=$(vke -o json project iam show $VKE_PROJECT $(context_options))
-    local direct=$(echo $policies | jq -r '.direct')
-    local inherited=$(echo $policies | jq -r '.inherited[]')
-    local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
-    local folder_policy=$(echo $inherited | jq -r 'select(.name | contains("folder"))')
-    local project_policy=$(echo $direct | jq -r 'select(.name | contains("project"))')
-    render_policy_tree_level 0 $org_policy
-    render_policy_tree_level 1 $folder_policy
-    render_policy_tree_level 2 $project_policy
-    exit 0
-}
-
-cluster_policy_tree() {
-    # Echo the IAM policies of a cluster
-    local policies=$(vke -o json cluster iam show $VKE_CLUSTER $(context_options))
-    local direct=$(echo $policies | jq -r '.direct')
-    local inherited=$(echo $policies | jq -r '.inherited[]')
-    local org_policy=$(echo $inherited | jq -r 'select(.name | contains("tenant"))')
-    local folder_policy=$(echo $inherited | jq -r 'select(.name | contains("folder"))')
-    local project_policy=$(echo $inherited | jq -r 'select(.name | contains("project"))')
-    local cluster_policy=$(echo $direct | jq -r 'select(.name | contains("cluster"))')
-    render_policy_tree_level 0 $org_policy
-    render_policy_tree_level 1 $folder_policy
-    render_policy_tree_level 2 $project_policy
-    render_policy_tree_level 3 $cluster_policy
-    exit 0
 }
 
 infer_cluster_context() {
@@ -309,11 +228,11 @@ infer_context() {
             #name_of_cluster "$VKE_RESOURCE_NAME"
             CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_CLUSTER}"
             CMD="$CMD $(context_options)"
-            if [[ "$CMD" =~ 'iam show' ]]; then cluster_policy_tree; fi
             ;;
         'project create'* | \
         'project delete'* | \
         'project show'* | \
+        'project list'* | \
         'project set'* | \
         'project iam show'* | \
         'project iam export'* | \
@@ -324,7 +243,6 @@ infer_context() {
             name_of_project "$VKE_RESOURCE_NAME"
             CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_PROJECT}"
             CMD="$CMD $(context_options)"
-            if [[ "$CMD" =~ 'iam show' ]]; then project_policy_tree; fi
             ;;
         'folder create'* | \
         'folder delete'* | \
@@ -337,7 +255,6 @@ infer_context() {
         'folder iam remove'*)
             name_of_folder "$VKE_RESOURCE_NAME"
             CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_FOLDER}"
-            if [[ "$CMD" =~ 'iam show' ]]; then folder_policy_tree; fi
             ;;
     esac
 }
@@ -364,7 +281,6 @@ if [[ $# -gt 0 ]]; then
 
     vke folder get | grep -q "No " || VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
     vke project get | grep -q "No " || VKE_PROJECT=$(vke -o json project get | jq -r '.Name')
-
 
     ## Look for context (folder & project) overrides
 

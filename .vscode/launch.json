@@ -48,14 +48,6 @@
         {
             "type": "bashdb",
             "request": "launch",
-            "name": "vke_wrapper cluster iam show alb-🦄-deve-epenthetic-comurmurer",
-            "cwd": "${workspaceFolder}",
-            "program": "${workspaceFolder}/vke_wrapper",
-            "args": ["cluster", "iam", "show", "alb-🦄-deve-epenthetic-comurmurer"]
-        },
-        {
-            "type": "bashdb",
-            "request": "launch",
             "name": "vke_wrapper folder show 'Shared Folder'",
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/vke_wrapper",
@@ -84,6 +76,14 @@
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/vke_wrapper",
             "args": ["project", "show"]
+        },
+        {
+            "type": "bashdb",
+            "request": "launch",
+            "name": "vke_wrapper folder set SharedFolder",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/vke_wrapper",
+            "args": ["folder", "set", "SharedFolder"]
         }
     ]
 }
