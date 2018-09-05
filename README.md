@@ -27,7 +27,7 @@ To ignore the alias use a backslach before the command, i.e. `\vke ...`
 
 ## Other VKE utilities
 You may have use for some other VKE projects:
-* [Install VKE CLI using homebrew](https://github.com/ali5ter/homebrew-vke)
+* [Install VKE CLI using homebrew](https://github.com/ali5ter/homebrew-vke-cli)
 * [VKE CLI bash or zsh completion](https://github.com/ali5ter/vke-completion)
 * [A bash VKE prompt](https://github.com/ali5ter/vke-prompt)
 * [Scripts used with VKE](https://github.com/ali5ter/vmware_scripts/tree/master/vke)
