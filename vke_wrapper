@@ -7,11 +7,7 @@
 # Functionaliy introduced using this wrapper are to are listed in the README
 # @author Alister Lewis-Bowen <alister@lewis-bowen.org>
 
-if [[ -n $DEBUG ]]; then
-    set -x
-    vke folder unset
-    vke project unset
-fi
+[[ -n $DEBUG ]] && set -x
 set -eou pipefail
 
 VKE_FOLDERS=''
@@ -28,246 +24,7 @@ VKE_DUMMY_NAME='n0t-m3nt-t0-b3-f0und'
 
 CMD="$*"
 
-select_object() {
-    # Prompt the user for the object they want to use.
-    # @param obj_type = folder|project
-    local obj_type="$1"
-    local objs=''
-    local obj_num=''
-    local aobjs=''
-    local obj_idx=1
-    local obj=''
-
-    case "$obj_type" in
-        folder) objs="$VKE_FOLDERS";;
-        project) objs="$VKE_PROJECTS";;
-        cluster) objs="$VKE_CLUSTERS";;
-    esac
-    obj_num=$(echo "$objs" | wc -l | sed 's/^ *//')
-
-    if [[ -z "$objs" ]]; then
-        exit 0
-    elif [[ "$obj_num" -eq 1 ]]; then
-        obj="$objs"
-    else
-        SAVEIFS=$IFS
-        IFS=$(echo -en "\n\b")
-        for obj in $objs; do
-            aobjs[$obj_idx]="$obj"
-            printf "    %3d ... %s (%s)\\n" "$obj_idx" "${obj#*::}" "${obj%::*}"
-            ((obj_idx++))
-        done
-        REPLY=''
-        until [[ "$REPLY" =~ ^-?[0-9]+$ && "$REPLY" -gt 0 && "$REPLY" -lt "(( $obj_num+1 ))" ]]; do
-            read -r -p "Select one of these ${obj_type}s [1-$obj_num]: "
-            echo
-        done
-        obj=${aobjs[$REPLY]}
-        IFS=$SAVEIFS
-    fi
-    VKE_OBJ_NAME="${obj%::*}" ## use the 'name' not 'display name'
-}
-
-select_folder() {
-    # Prompt user for the folder they want to use
-    select_object 'folder'
-    VKE_FOLDER="$VKE_OBJ_NAME"
-}
-
-select_project() {
-    # Prompt the user for the project they want to use
-    select_object 'project'
-    VKE_PROJECT="$VKE_OBJ_NAME"
-}
-
-select_cluster() {
-    # Prompt the user for the cluster they want to use
-    select_object 'cluster'
-    VKE_CLUSTER="$VKE_OBJ_NAME"
-}
-
-name_of_object() {
-    # Find the folder|project|cluster name if the display name used
-    # @param obj_type = folder|project|cluster
-    # @param aname = name|display name of object
-    local obj_type="$1"; shift
-    local aname="$*"
-    local objs=''
-    local name=''
-    local dname=''
-    local found=1
-    [[ "$aname" =~ create|show|rename|delete|get|export|import|add|remove|list|get-kubectl-auth|merge-kubectl-auth|$VKE_PROJECT|$VKE_FOLDER ]] && {
-        CMD="$CMD $VKE_DUMMY_NAME"
-        VKE_RESOURCE_NAME="$VKE_DUMMY_NAME"
-        return $found
-    }
-    case "$obj_type" in
-        folder) objs="$VKE_FOLDERS";;
-        project) objs="$VKE_PROJECTS";;
-        cluster) objs="$VKE_CLUSTERS";;
-    esac
-    SAVEIFS=$IFS
-    IFS=$(echo -en "\n\b")
-    for obj in $objs; do
-            name="${obj%::*}"
-            dname="${obj#*::}"
-            if [[ ("$aname" == "$name") || ("$aname" == "$dname") ]]; then
-                case "$obj_type" in
-                    folder) VKE_FOLDER="$name";;
-                    project) VKE_PROJECT="$name";;
-                    cluster) VKE_CLUSTER="$name";;
-                esac
-                found=0
-            fi
-    done
-    IFS=$SAVEIFS
-    return "$found"
-}
-
-name_of_folder() {
-    # Find the folder name if the display name used
-    # OR prompt the user for the folder name
-    # @param name|display name of folder
-    name_of_object 'folder' "$*" || select_folder
-}
-
-name_of_project() {
-    # Find the project name if the display name used
-    # OR prompt the user for the project name
-    # @param name|display name of project
-    name_of_object 'project' "$*" || select_project
-}
-
-name_of_cluster() {
-    # Find the cluster name if the display name used
-    # OR prompt the user for the cluster name
-    # @param name|display name of cluster
-    name_of_object 'cluster' "$*" || select_cluster
-}
-
-repeat() {
-    # Echo a string X number of times
-    # @param number of times to repeat string
-    # @param the string to repeat
-    local times="$1"; shift
-    local string="$*"
-    printf "%${times}s\n" | sed "s/ /${string}/g"
-}
-
-context_options() {
-    local opt
-    [[ -z "$VKE_FOLDER" ]] || opt="--folder $VKE_FOLDER"
-    [[ -z "$VKE_PROJECT" ]] || opt="$opt --project $VKE_PROJECT"
-    echo "$opt"
-}
-
-infer_cluster_context() {
-    # Find the folder and project names using the cluster name
-    name_of_cluster "$VKE_RESOURCE_NAME"
-    context=$(vke -o json cluster list | jq -r --arg NAME "$VKE_CLUSTER" '.items[] | select(.name==$NAME) | .folderName +"::"+ .projectName')
-    VKE_FOLDER="${context%::*}"
-    VKE_PROJECT="${context#*::}"
-}
-
-infer_project_context() {
-    # Find the folder name using the project name
-    if [[ "$VKE_FOLDER" == '' ]]; then
-        SAVEIFS=$IFS
-        IFS=$(echo -en "\n\b")
-        found=1
-        for folder in $VKE_FOLDERS; do
-            VKE_FOLDER="${folder%::*}"
-            VKE_PROJECTS=$(vke -o json project list $(context_options) | jq -r '.items[] | .name +"::"+ .displayName')
-            for project in $VKE_PROJECTS; do
-                VKE_PROJECT="${project#*::}"
-                if name_of_object 'project' "$VKE_RESOURCE_NAME"; then found=0; break; fi
-            done
-            if (( found == 1 )); then break; fi
-        done
-        IFS=$SAVEIFS
-    else
-        VKE_PROJECTS=$(vke -o json project list $(context_options) | jq -r '.items[] | .name +"::"+ .displayName')
-    fi
-}
-
-infer_context() {
-    # Check if the folder|project context needs to be set for the vke
-    # command based on the given name of the object.
-    local context=''
-    #set -- "$CMD"
-    case "$CMD" in
-        'cluster create'* | \
-        'cluster show-health'* | \
-        'cluster show'* | \
-        'cluster rename'* | \
-        'cluster delete'* | \
-        'cluster upgrade'* | \
-        'cluster get-kubectl-auth'* | \
-        'cluster merge-kubectl-auth'* | \
-        'cluster iam show'* | \
-        'cluster iam export'* | \
-        'cluster iam import'* | \
-        'cluster iam add'* | \
-        'cluster iam remove'* | \
-        'cluster namespace create'* | \
-        'cluster namespace delete'* | \
-        'cluster namespace show'* | \
-        'cluster namespace list'* | \
-        'cluster peering create'* | \
-        'cluster peering delete'* | \
-        'cluster peering rename'* | \
-        'cluster peering show'* | \
-        'cluster peering list'*)
-            ## note: cluster list works without context being set
-            [[ ("$CMD" =~  upgrade) && ( -z "${VKE_VERSION}") ]] && {
-                # default to the latest version of K8s
-                VKE_VERSION=$(vke -o json cluster versions list -r "$VKE_DEFAULT_REGION" | jq -r '.items[] | select(.isDefault == true) | .version')
-                CMD="${CMD% *} -v $VKE_VERSION $VKE_RESOURCE_NAME"
-            }
-            infer_cluster_context
-            #name_of_cluster "$VKE_RESOURCE_NAME"
-            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_CLUSTER}"
-            CMD="$CMD $(context_options)"
-            ;;
-        'project create'* | \
-        'project delete'* | \
-        'project show'* | \
-        'project list'* | \
-        'project set'* | \
-        'project iam show'* | \
-        'project iam export'* | \
-        'project iam import'* | \
-        'project iam add'* | \
-        'project iam remove'*)
-            infer_project_context
-            name_of_project "$VKE_RESOURCE_NAME"
-            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_PROJECT}"
-            CMD="$CMD $(context_options)"
-            ;;
-        'folder create'* | \
-        'folder delete'* | \
-        'folder show'* | \
-        'folder set'* | \
-        'folder iam show'* | \
-        'folder iam export'* | \
-        'folder iam import'* | \
-        'folder iam add'* | \
-        'folder iam remove'*)
-            name_of_folder "$VKE_RESOURCE_NAME"
-            CMD="${CMD/$VKE_RESOURCE_NAME/$VKE_FOLDER}"
-            ;;
-    esac
-}
-
 if [[ $# -gt 0 ]]; then
-
-    ## Prefetch folders
-
-    VKE_FOLDERS=$(vke -o json folder list | jq -r '.items[] | .name +"::"+ .displayName')
-
-    ## Prefetch cluster (since CLI allows you to do this without context)
-
-    VKE_CLUSTERS=$(vke -o json cluster list | jq -r '.items[] | .name +"::"+ .displayName')
 
     ## Create a default region (the lowest ID)
 
@@ -277,19 +34,12 @@ if [[ $# -gt 0 ]]; then
 
     VKE_RESOURCE_NAME="${@: -1}"
 
-    ## Look for existing context (folder & project)
-
-    vke folder get | grep -q "No " || VKE_FOLDER=$(vke -o json folder get | jq -r '.Name')
-    vke project get | grep -q "No " || VKE_PROJECT=$(vke -o json project get | jq -r '.Name')
-
     ## Look for context (folder & project) overrides
 
     VKE_SUBCOMMAND=''
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -f | --folder )     VKE_FOLDER="$2"; shift; shift ;;
-            -p | --project )    VKE_PROJECT="$2"; shift; shift ;;
             cluster )           VKE_SUBCOMMAND='cluster'; shift ;;
             -v | --version )
                 ## Since --version has two meanings in the VKE cli...
@@ -303,7 +53,11 @@ if [[ $# -gt 0 ]]; then
     done
 
     if [[ "$VKE_PASSTHROUGH" == 'n' ]]; then
-        infer_context
+        [[ ("VKE_SUBCOMMAND" == 'cluster') && ("$CMD" =~  upgrade) && ( -z "${VKE_VERSION}") ]] && {
+                # default to the latest version of K8s
+                VKE_VERSION=$(vke -o json cluster versions list -r "$VKE_DEFAULT_REGION" | jq -r '.items[] | select(.isDefault == true) | .version')
+                CMD="${CMD% *} -v $VKE_VERSION $VKE_RESOURCE_NAME"
+            }
     fi
 fi
 

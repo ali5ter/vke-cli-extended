@@ -7,12 +7,13 @@ This wrapper provides the following features to the VKE CLI:
 * ~~Remove need for the `vke folder set` and `vke project set` commands by inferring
   the folder and project name based on resource name.~~ The CLI now does this.
   :white_check_mark:
-* If the folder or project name can not be inferred, present the user with a list
-  to select from. Coming to the CLI soon :tada:
+* ~~If the folder or project name can not be inferred, present the user with a list
+  to select from.~~ The CLI now does this.
+  :white_check_mark:
 * ~~Allow the use of the 'display name' to identify a resource.~~ The CLI now does this.
   :white_check_mark:
-* If a resource name can not be found, present the user with a list to select from. 
-  Coming to the CLI soon :tada:
+* ~~If a resource name can not be found, present the user with a list to select from.~~ The CLI now does this.
+  :white_check_mark:
 * Default to latest K8s version when using `vke cluster upgrade`
 * ~~Change output of `vke folder iam show`, `vke project iam show` and 
   `vke cluster iam show` to display a tree of policies, roles and identites.~~
