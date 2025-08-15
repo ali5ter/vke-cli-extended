@@ -1,3 +1,5 @@
+> **⚠️ This project is archived and no longer maintained.**
+
 # vke cli-extended
 [vke_wrapper](vke_wrapper) is very experimental so use at your own risk. It 
 is used to to enhaunce the developer experience of the VMware Cloud PKS (formerly VKE) CLI. 
@@ -24,7 +26,7 @@ Use the wrapper by employing an alias, e.g.
 
     $ alias vke="$PWD/vke_wrapper"
 
-To ignore the alias use a backslach before the command, i.e. `\vke ...`
+To ignore the alias use a backslach before the command, i.e. `ke ...`
 
 ## Pre-requisites
 [jq](https://stedolan.github.io/jq/download/) is used to parse JSON responses from the Cloud PKS CLI.
