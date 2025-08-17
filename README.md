@@ -1,7 +1,5 @@
 > **⚠️ Archived 2025-08-16. No longer maintained.**
 
-> **⚠️ This project is archived and no longer maintained.**
-
 # vke cli-extended
 [vke_wrapper](vke_wrapper) is very experimental so use at your own risk. It 
 is used to to enhaunce the developer experience of the VMware Cloud PKS (formerly VKE) CLI. 
