@@ -1,4 +1,4 @@
-> **⚠️ Archived 2025-08-21. No longer maintained.**
+> **⚠️ Archived 2025-08-24. No longer maintained.**
 
 # vke cli-extended
 [vke_wrapper](vke_wrapper) is very experimental so use at your own risk. It 
